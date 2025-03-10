@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>15 Puzzle Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f0f0;
+            margin: 0;
+            min-height: 100vh;
+        }
+
+        .board-container {
+            position: relative;
+            width: 240px;
+            height: 240px;
+            margin: 20px;
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+
+        .tile {
+            width: 60px;
+            height: 60px;
+            border: 1px solid #ccc;
+            text-align: center;
+            font-size: 20px;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+            position: absolute;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: white;
+            user-select: none;
+        }
+
+        .tile.moving {
+            z-index: 2;
+            transition: transform 0.3s ease;
+        }
+
+        button {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        #stats {
+            margin: 10px;
+            font-size: 18px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="stats">
+        Moves: <span id="moveCount">0</span> | 
+        Time: <span id="time">0</span>s
+    </div>
+    <div id="board" class="board-container"></div>
+    <div>
+        <button id="newGame">New Game</button>
+        <button id="simpleGame">Simple Game</button>
+    </div>
+
+    <script>
+        class PuzzleGame {
+            constructor() {
+                this.board = [];
+                this.emptyPos = { row: 3, col: 3 };
+                this.moves = 0;
+                this.time = 0;
+                this.timer = null;
+                this.isGameActive = false;
+                this.tiles = new Map();
+
+                this.initBoard();
+                this.setupEventListeners();
+                this.startNewGame();
+            }
+
+            initBoard() {
+                this.board = Array(4).fill().map(() => Array(4).fill(0));
+            }
+
+            setupEventListeners() {
+                document.getElementById('newGame').addEventListener('click', () => this.startNewGame());
+                document.getElementById('simpleGame').addEventListener('click', () => this.createSimpleGame());
+            }
+
+            startNewGame() {
+                this.moves = 0;
+                this.time = 0;
+                this.isGameActive = true;
+                this.updateStats();
+                this.generateRandomBoard();
+                this.startTimer();
+                this.renderBoard(true);
+            }
+
+            createSimpleGame() {
+                this.moves = 0;
+                this.time = 0;
+                this.isGameActive = true;
+                this.updateStats();
+                this.generateSolvedBoard();
+                
+                [this.board[3][2], this.board[3][3]] = [this.board[3][3], this.board[3][2]];
+                this.emptyPos = { row: 3, col: 2 }; 
+                
+                this.startTimer();
+                this.renderBoard();
+            }
+
+            generateRandomBoard() {
+                let numbers = Array.from({ length: 15 }, (_, i) => i + 1);
+                numbers.sort(() => Math.random() - 0.5);
+                
+                for (let i = 0; i < 4; i++) {
+                    for (let j = 0; j < 4; j++) {
+                        this.board[i][j] = numbers[i * 4 + j] || 0;
+                        if (this.board[i][j] === 0) this.emptyPos = { row: i, col: j };
+                    }
+                }
+            }
+
+            generateSolvedBoard() {
+                let count = 1;
+                for (let i = 0; i < 4; i++) {
+                    for (let j = 0; j < 4; j++) {
+                        this.board[i][j] = count++;
+                    }
+                }
+                this.board[3][3] = 0;
+                this.emptyPos = { row: 3, col: 3 };
+            }
+
+            renderBoard() {
+                const container = document.getElementById('board');
+                container.innerHTML = '';
+
+                for (let i = 0; i < 4; i++) {
+                    for (let j = 0; j < 4; j++) {
+                        const value = this.board[i][j];
+                        if (value === 0) continue;
+
+                        const tile = this.createTile(value, i, j);
+                        container.appendChild(tile);
+                    }
+                }
+            }
+
+            createTile(value, row, col) {
+                const tile = document.createElement('div');
+                tile.className = 'tile';
+                tile.textContent = value;
+                tile.dataset.value = value;
+                tile.style.transform = `translate(${col * 60}px, ${row * 60}px)`;
+                tile.addEventListener('click', (e) => this.handleTileClick(row, col, e));
+                return tile;
+            }
+
+            async handleTileClick(row, col, event) {
+                if (!this.isGameActive || !this.isAdjacent(row, col)) return;
+
+                const tileElement = event.target;
+                const originalTransform = tileElement.style.transform;
+                
+                tileElement.classList.add('moving');
+                tileElement.style.transform = 
+                    `translate(${this.emptyPos.col * 60}px, ${this.emptyPos.row * 60}px)`;
+
+                await new Promise(resolve => setTimeout(resolve, 300));
+                tileElement.classList.remove('moving');
+
+                [this.board[row][col], this.board[this.emptyPos.row][this.emptyPos.col]] = 
+                    [this.board[this.emptyPos.row][this.emptyPos.col], this.board[row][col]];
+                this.emptyPos = { row, col };
+
+                this.moves++;
+                this.updateStats();
+                this.renderBoard();
+
+                if (this.checkWin()) {
+                    this.endGame();
+                }
+            }
+
+            isAdjacent(row, col) {
+                return (Math.abs(row - this.emptyPos.row) === 1 && col === this.emptyPos.col) ||
+                    (Math.abs(col - this.emptyPos.col) === 1 && row === this.emptyPos.row);
+            }
+
+            checkWin() {
+                let count = 1;
+                for (let i = 0; i < 4; i++) {
+                    for (let j = 0; j < 4; j++) {
+                        if (i === 3 && j === 3) return true;
+                        if (this.board[i][j] !== count++) return false;
+                    }
+                }
+                return true;
+            }
+
+            startTimer() {
+                clearInterval(this.timer);
+                this.timer = setInterval(() => {
+                    if (this.isGameActive) {
+                        this.time++;
+                        document.getElementById('time').textContent = this.time;
+                    }
+                }, 1000);
+            }
+
+            updateStats() {
+                document.getElementById('moveCount').textContent = this.moves;
+                document.getElementById('time').textContent = this.time;
+            }
+
+            endGame() {
+                this.isGameActive = false;
+                clearInterval(this.timer);
+                if (confirm(`You won in ${this.moves} moves and ${this.time} seconds! Play again?`)) {
+                    this.startNewGame();
+                }
+            }
+        }
+
+        // Initialize the game when the page loads
+        new PuzzleGame();
+    </script>
+</body>
+</html>
